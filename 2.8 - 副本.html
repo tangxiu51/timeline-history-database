@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>时序编录——历史数据库</title>
+<style>
+*{box-sizing: border-box;}
+body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#f7f7fa;
+    color:#2c2c34;
+}
+.header{
+    padding:14px 20px;
+    background:#fff;
+    border-bottom:1px solid #e4e4eb;
+}
+.header h2{margin:0;font-size:19px;}
+.header small{color:#777;font-size:13px;}
+.container{
+    display:flex;
+    height:calc(100vh - 70px);
+}
+
+.left{
+    width:320px;
+    min-width:320px;
+    background:#fff;
+    padding:16px;
+    border-right:1px solid #e4e4eb;
+    overflow-y:auto;
+}
+.right{
+    flex:1;
+    display: flex;
+    flex-direction: column;
+    padding:20px;
+    /* 核心：右侧整体纵向布局，内容区单独滚动 */
+}
+/* ========== 修复需求1：顶部栏固定 ========== */
+.right-top-fixed {
+    flex-shrink: 0; /* 禁止压缩，固定高度不滚动 */
+}
+.right-scroll-wrap {
+    flex: 1;
+    overflow: auto; /* 只有表格/时间轴内容滚动 */
+    padding-top: 10px;
+}
+
+.block{
+    background:#f9f9fd;
+    padding:16px;
+    border-radius:16px;
+    margin-bottom:16px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.03);
+}
+.block h3{
+    margin-top:0;
+    margin-bottom:12px;
+    font-size:16px;
+    color:#2d2d3a;
+}
+input,textarea{
+    width:100%;
+    padding:10px 12px;
+    margin:6px 0;
+    border:1px solid #dddfe6;
+    border-radius:12px;
+    background:#fff;
+    transition:all 0.2s ease;
+}
+input:hover,textarea:hover{border-color:#c5cde0;}
+input:focus,textarea:focus{
+    outline:none;
+    border-color:#587ed8;
+    box-shadow:0 0 0 2px rgba(88, 126, 216, 0.15);
+}
+textarea{height:100px;resize:none;}
+button{
+    padding:10px 14px;
+    border:none;
+    border-radius:12px;
+    cursor:pointer;
+    transition:all 0.2s ease;
+    font-size:14px;
+}
+.primary{
+    background:#587ed8;
+    color:#fff;
+    white-space:nowrap;
+}
+.primary:hover{
+    background:#4a6fc1;
+}
+.secondary{
+    background:#e8e8f0;
+    color:#333;
+}
+.secondary:hover{
+    background:#dcdce8;
+}
+.secondary:disabled{
+    background:#f0f0f5;
+    color:#aaa;
+    cursor:not-allowed;
+}
+.archive-input-row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin:6px 0;
+}
+.archive-input-row input{
+    margin:0;
+    flex:1;
+}
+.archive-actions-row{
+    display:flex;
+    gap:8px;
+    margin-top:8px;
+}
+.archive-actions-row button{
+    flex:1;
+    padding:8px 10px;
+    font-size:13px;
+}
+.viewBar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+}
+.view-buttons{
+    display:flex;
+    gap:10px;
+}
+.search-container{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    flex:1;
+    max-width:500px;
+    min-width:200px;
+}
+.search-box{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    width:100%;
+}
+#searchInput{
+    margin:0;
+    flex:1;
+    min-width:150px;
+}
+.search-nav-buttons{
+    display:flex;
+    gap:4px;
+}
+.search-tip{
+    font-size:12px;
+    color:#666;
+    padding-left:4px;
+}
+.viewBar .secondary.active-view{
+    background:#587ed8;
+    color:#fff;
+}
+.title-wrap{
+    background:#f0f1fb;
+    padding:10px 16px;
+    border-radius:12px;
+    margin-bottom:18px;
+}
+#title{
+    margin:0;
+    font-size:17px;
+    color:#2d2d3a;
+}
+
+.archiveItem{
+    padding:8px 12px;
+    margin:6px 0;
+    border-radius:12px;
+    background:#fff;
+    border:1px solid #d0d0dd;
+    cursor:pointer;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    max-width:300px;
+    transition:background 0.2s;
+}
+.archiveItem:hover:not(.active){
+    background:#f4f4fc;
+}
+.archiveItem.active{
+    background:#3a3a48;
+    color:#fff;
+    border-color:#3a3a48;
+}
+.archiveItem span{
+    flex:1;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+.archive-actions button{
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-size:12px;
+    margin-left:6px;
+    padding:3px 6px;
+    border-radius:6px;
+    transition:background 0.2s;
+}
+.archiveItem.active .archive-actions button{color:#ccc;}
+.archiveItem.active .archive-actions button:hover{background:rgba(255,255,255,0.15);color:#fff;}
+.archiveItem:not(.active) .archive-actions button{color:#777;}
+.archiveItem:not(.active) .archive-actions button:hover{background:#eaeaf6;color:#333;}
+.timeGrid{display:flex;gap:14px;}
+.timeCol{flex:1}
+.label{font-size:13px;color:#666;margin-top:8px;display:block;}
+
+.mark-normal{background:#e5e7eb;color:#1a2847;font-weight:bold;}
+.mark-self{background:#fff0e0;color:#803900;font-weight:bold;}
+.mark-both{background:#ffe8f0;color:#861c42;font-weight:bold;}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:#fff;
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 2px 8px rgba(0,0,0,0.04);
+}
+th,td{
+    padding:14px 16px;
+    border-bottom:1px solid #efeff6;
+    font-size:14px;
+    vertical-align:top;
+}
+th{background:#f3f3fb;text-align:left;font-weight:600;color:#444;}
+tbody tr:nth-child(even){background:#f9f9fd;}
+thead tr,tbody tr{display:table;width:100%;table-layout:fixed;}
+td:nth-child(1),th:nth-child(1){width:24%;}
+td:nth-child(2),th:nth-child(2){width:9%;}
+td:nth-child(3),th:nth-child(3){width:40%;}
+td:nth-child(4),th:nth-child(4){width:11%;}
+td:nth-child(5),th:nth-child(5){width:16%;}
+.tag{
+    padding:6px 11px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:500;
+    display:inline-block;
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+table td:nth-child(2) .tag {
+    color:#ffffff !important;
+}
+.search-highlight{
+    background:#fff9e6 !important;
+    border:2px solid #ffd700 !important;
+    transition:all 0.3s ease;
+}
+
+/* ========== 时间轴修复部分 ========== */
+.timeline-container{
+    position:relative;
+    padding:50px 0 40px;
+    width:100%;
+}
+/* 修复1：竖线对齐中间区块中心 30% + 4%/2 = 32% */
+.v-line{
+    position:absolute;
+    left:32%;
+    top:0;bottom:0;
+    width:1px;
+    background:linear-gradient(#e0e0ee, #c8c8dd, #e0e0ee);
+    z-index:1;
+}
+.t-node{
+    position:relative;
+    width:100%;
+    margin-bottom:70px;
+    display:flex;
+    align-items:center;
+    min-height:130px;
+    gap:0;
+}
+.t-block-a{
+    width:30%;
+    padding-right:24px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+    align-items:flex-end;
+}
+.t-block-center{
+    width:4%;
+    position:relative;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+.t-dot{
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    z-index:2;
+    border:3px solid #fff;
+    box-shadow:0 1px 5px rgba(0,0,0,0.08);
+}
+.t-block-b{
+    width:30%;
+    padding-left:24px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+    align-items:flex-start;
+}
+/* 修复2：C区块增加左外边距，避开B区域，连线不再横穿B卡片 */
+.t-block-c{
+    width:36%;
+    padding-left:36px;
+    margin-left:12px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:16px;
+    align-items:center;
+}
+.t-card{
+    width:calc(100% - 10px);
+    min-width:240px;
+    max-width:360px;
+    padding:18px 22px;
+    border-radius:16px;
+    box-shadow:0 2px 14px rgba(0,0,0,0.06);
+    z-index:2; /* 卡片永远在连线上层，盖住线条 */
+    transition:transform 0.25s ease, box-shadow 0.25s ease;
+    overflow:visible !important;
+    background:#ffffff;
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+}
+.t-card.sub-c{
+    background:#dce4ef;
+    box-shadow:0 1px 8px rgba(0,0,0,0.04);
+}
+.t-card.is-key-self::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 40px;
+    border-top-right-radius: 16px;
+    clip-path: polygon(100% 0, 0 0, 100% 100%);
+    background: #ffbb78;
+    z-index: 5;
+}
+.t-card.is-key-both::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 40px;
+    border-top-right-radius: 16px;
+    clip-path: polygon(100% 0, 0 0, 100% 100%);
+    background: #ff96b4;
+    z-index: 5;
+}
+.t-card.main-a.is-key-self::after,
+.t-card.main-a.is-key-both::after {
+    top: 0;
+    left: 0;
+    right: auto;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 0;
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+.t-card:hover{
+    transform:translateY(-4px);
+    box-shadow:0 6px 20px rgba(0,0,0,0.09);
+}
+/* 所有连线 z-index:0 底层，被卡片遮挡 */
+.t-card.main-a::before{
+    content:"";
+    position:absolute;
+    top:50%;
+    transform: translateY(-50%);
+    width:26px;
+    height:2px;
+    background:#c0c0d0;
+    right:-26px;
+    z-index:0;
+}
+.t-card.main-b::before{
+    content:"";
+    position:absolute;
+    top:50%;
+    transform: translateY(-50%);
+    width:26px;
+    height:2px;
+    background:#c0c0d0;
+    left:-26px;
+    z-index:0;
+}
+/* 修复3：C连线缩短，只延伸到中轴线，不再跨过B区域 */
+.t-card.sub-c::before{
+    content:"";
+    position:absolute;
+    top:50%;
+    transform: translateY(-50%);
+    height:2px;
+    background:#b8b8cc;
+    right:100%;
+    /* 宽度只到中轴线32%位置，不覆盖B的30%区域 */
+    width:calc(32% - 30% + 24px);
+    z-index:0;
+}
+.t-time{
+    font-size:14px;
+    font-weight:600;
+    color:#444;
+    background:#f3f3fb;
+    display:inline-block;
+    padding:4px 10px;
+    border-radius:8px;
+    margin-bottom:10px;
+}
+.t-person{
+    font-size:15px;
+    font-weight:700;
+}
+.t-text{
+    font-size:15px;
+    color:#1f1f2b;
+    line-height:1.65;
+}
+.t-actions{
+    margin-top:12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.action-btn{
+    background:none;
+    border:none;
+    color:#999;
+    font-size:14px;
+    padding:4px 8px;
+    cursor:pointer;
+    transition:all 0.2s;
+    border-radius:8px;
+}
+.action-btn:hover{
+    color:#333;
+    background:#f0f0f8;
+}
+</style>
+</head>
+<body>
+<div class="header">
+    <h2>时序编录——历史数据库</h2>
+    <small>整理感兴趣历史时段的档案工具</small>
+</div>
+<div class="container">
+<div class="left">
+    <div class="block">
+        <h3>档案</h3>
+        <div class="archive-input-row">
+            <input id="newArchive" placeholder="输入档案名称">
+            <button class="primary" onclick="createArchive()">新建</button>
+        </div>
+        <div class="archive-actions-row">
+            <button class="secondary" onclick="exportJSON()">导出JSON</button>
+            <button class="secondary" onclick="triggerImport()">导入JSON</button>
+            <input type="file" id="importInput" accept=".json" style="display:none" onchange="importJSON(event)">
+        </div>
+        <div id="archiveList"></div>
+    </div>
+    <div class="block">
+        <h3>时间</h3>
+        <div class="timeGrid">
+            <div class="timeCol">
+                <div class="label">开始年 <span style="color:#d16060">*</span></div>
+                <input id="sy" type="number">
+                <div class="label">开始年号</div>
+                <input id="reignStart" placeholder="(选填)">
+                <div class="label">月</div>
+                <input id="sm" type="number" min="1" max="12" placeholder="(选填)">
+                <div class="label">日</div>
+                <input id="sd" type="number" min="1" max="31" placeholder="(选填)">
+            </div>
+            <div class="timeCol">
+                <div class="label">结束年</div>
+                <input id="ey" type="number" placeholder="(选填)">
+                <div class="label">结束年号</div>
+                <input id="reignEnd" placeholder="(选填)">
+                <div class="label">月</div>
+                <input id="em" type="number" min="1" max="12" placeholder="(选填)">
+                <div class="label">日</div>
+                <input id="ed" type="number" min="1" max="31" placeholder="(选填)">
+            </div>
+        </div>
+    </div>
+    <div class="block">
+        <h3>记录</h3>
+        <div class="label">人物</div>
+        <input id="person" list="personList" placeholder="输入人物名称">
+        <datalist id="personList"></datalist>
+        <div style="display:flex;gap:14px;margin:10px 0;font-size:13px;align-items:center;">
+            <label>
+                <input type="radio" name="isMain" value="true" checked style="width:auto;margin-right:6px;">
+                主线
+            </label>
+            <label>
+                <input type="radio" name="isMain" value="false" style="width:auto;margin-right:6px;">
+                非主线
+            </label>
+        </div>
+        <div class="label">事件描述</div>
+        <textarea id="text"></textarea>
+        <div class="label">事件重要等级</div>
+        <div style="display:flex;gap:10px;margin:6px 0 10px;font-size:13px;flex-wrap:wrap;">
+            <label>
+                <input type="radio" name="markLevel" value="normal" checked style="width:auto;">普通
+            </label>
+            <label>
+                <input type="radio" name="markLevel" value="self" style="width:auto;">单人关键
+            </label>
+            <label>
+                <input type="radio" name="markLevel" value="both" style="width:auto;">双人关键
+            </label>
+        </div>
+        <button id="submitBtn" class="primary" onclick="submitRecord()">记录史料</button>
+    </div>
+</div>
+<div class="right">
+    <!-- 修复需求1：顶部固定容器 -->
+    <div class="right-top-fixed">
+        <div class="viewBar">
+            <div class="view-buttons">
+                <button class="secondary" onclick="switchView('table')">表格</button>
+                <button class="secondary active-view" onclick="switchView('timeline')">时间轴</button>
+            </div>
+            <div class="search-container">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="输入关键词搜索事件...">
+                    <button class="secondary" onclick="searchEvent()">搜索</button>
+                    <div class="search-nav-buttons">
+                        <button class="secondary" id="prevBtn" onclick="prevSearchResult()" disabled>上一条</button>
+                        <button class="secondary" id="nextBtn" onclick="nextSearchResult()" disabled>下一条</button>
+                    </div>
+                </div>
+                <div class="search-tip" id="searchTip"></div>
+            </div>
+        </div>
+        <div class="title-wrap">
+            <h3 id="title"></h3>
+        </div>
+    </div>
+    <!-- 仅该区域滚动：表格/时间轴内容 -->
+    <div class="right-scroll-wrap">
+        <div id="view"></div>
+    </div>
+</div>
+</div>
+
+<script>
+let archives = {};
+let current = "";
+let mode = "timeline";
+let editingId = null;
+let searchResults = [];
+let currentSearchIndex = 0;
+let lastSearchKeyword = "";
+
+const MAIN_A_COLOR = "#587ed8";
+const MAIN_B_COLOR = "#d16060";
+const SUB_COLORS = ["#8c8494","#98aa9c","#a8b8c8","#c4a8a0","#999fcc","#b8c8bc"];
+
+window.onload = function(){
+    archives = JSON.parse(localStorage.getItem("archives")||"{}");
+    const keys = Object.keys(archives);
+    if(keys.length) current = keys[0];
+    renderArchives(); render();
+    document.getElementById("searchInput").addEventListener("keydown", e=>{if(e.key === "Enter") searchEvent();});
+    document.getElementById("searchInput").addEventListener("input", e=>{if(e.target.value.trim() !== lastSearchKeyword) resetSearchState();});
+};
+
+function switchView(type){
+    mode = type;
+    document.querySelectorAll(".viewBar .secondary").forEach(btn=>btn.classList.remove("active-view"));
+    event.target.classList.add("active-view");
+    render();
+    if(searchResults.length > 0) setTimeout(()=>scrollToSearchResult(currentSearchIndex),100);
+}
+
+function save(){ localStorage.setItem("archives", JSON.stringify(archives)); }
+function createArchive(){
+    const name = document.getElementById("newArchive").value.trim();
+    if(!name) return;
+    if(!archives[name]) archives[name]=[];
+    current = name;
+    save(); renderArchives(); render();
+    document.getElementById("newArchive").value = "";
+}
+function deleteArchive(name){
+    if(!confirm("确定删除档案【"+name+"】？")) return;
+    delete archives[name];
+    current = Object.keys(archives)[0]||"";
+    save(); renderArchives(); render(); resetSearchState();
+}
+function renameArchive(oldName){
+    const newName = prompt("修改档案名称",oldName);
+    if(!newName?.trim() || newName.trim()===oldName) return;
+    const t = newName.trim();
+    if(archives[t]){alert("名称已存在");return;}
+    archives[t] = archives[oldName]; delete archives[oldName];
+    if(current === oldName) current = t;
+    save(); renderArchives(); render();
+}
+function renderArchives(){
+    const box=document.getElementById("archiveList"); box.innerHTML="";
+    Object.keys(archives).forEach(name=>{
+        const active = name===current?"active":"";
+        const div = document.createElement("div");
+        div.className = `archiveItem ${active}`;
+        div.onclick = e=>{if(e.target.tagName!=="BUTTON"){current=name;renderArchives();render();}};
+        div.innerHTML = `<span title="${name}">${name}</span><div class="archive-actions"><button onclick="event.stopPropagation();renameArchive('${name}')">✎</button><button onclick="event.stopPropagation();deleteArchive('${name}')">✕</button></div>`;
+        box.appendChild(div);
+    });
+}
+function updatePersonList(){
+    const list = document.getElementById("personList"); list.innerHTML="";
+    if(!current) return;
+    [...new Set(archives[current].map(x=>x.person))].forEach(p=>{
+        const opt = document.createElement("option"); opt.value=p; list.appendChild(opt);
+    });
+}
+function submitRecord(){
+    const p = document.getElementById("person").value.trim();
+    if(!p){alert("人物不能为空");return;}
+    if(!current || !document.getElementById("sy").value.trim()){alert("开始年必填");return;}
+    const isMain = document.querySelector('input[name="isMain"]:checked').value === "true";
+    const mark = document.querySelector('input[name="markLevel"]:checked').value;
+    if(isMain){
+        const mains = [...new Set(archives[current].filter(x=>x.isMain && x.id!==editingId).map(x=>x.person))];
+        if(p && !mains.includes(p) && mains.length>=2){
+            alert(`主线最多两人：${mains.join("、")}`);return;
+        }
+    }
+    const timeKey = `${document.getElementById("sy").value}-${document.getElementById("sm").value||0}-${document.getElementById("sd").value||0}`;
+    const item = {
+        sy:document.getElementById("sy").value,
+        sm:document.getElementById("sm").value,
+        sd:document.getElementById("sd").value,
+        ey:document.getElementById("ey").value,
+        em:document.getElementById("em").value,
+        ed:document.getElementById("ed").value,
+        reignStart:document.getElementById("reignStart").value,
+        reignEnd:document.getElementById("reignEnd").value,
+        person:p,
+        text:document.getElementById("text").value,
+        isMain:isMain,
+        mark:mark,
+        timeKey: timeKey
+    };
+    if(editingId){
+        const idx = archives[current].findIndex(x=>x.id===editingId);
+        if(idx>-1){item.id=editingId;archives[current][idx]=item;}
+    }else{
+        item.id = Date.now(); archives[current].push(item);
+    }
+    save(); render(); resetForm(); resetSearchState();
+}
+function resetForm(){
+    editingId=null;
+    document.getElementById("submitBtn").innerText="记录史料";
+    ["sy","sm","sd","ey","em","ed","reignStart","reignEnd","person","text"].forEach(id=>document.getElementById(id).value="");
+    document.querySelector('input[name="isMain"][value="true"]').checked=true;
+    document.querySelector('input[name="markLevel"][value="normal"]').checked=true;
+}
+function fixTimeKey(list){
+    return list.map(item=>{
+        if(item.timeKey) return item;
+        item.timeKey = `${item.sy||0}-${item.sm||0}-${item.sd||0}`;
+        return item;
+    })
+}
+function sortData(data){
+    const fixed = fixTimeKey(data);
+    return [...fixed].sort((a,b)=>a.timeKey.localeCompare(b.timeKey));
+}
+function render(){
+    if(!current){document.getElementById("view").innerHTML="";document.getElementById("title").innerText="暂无档案";return;}
+    document.getElementById("title").innerText=`当前档案：${current}`;
+    updatePersonList();
+    const rawData = archives[current];
+    const data = sortData(rawData);
+    const mainNames = [...new Set(data.filter(i=>i.isMain).map(i=>i.person))];
+    const colorMap = {};
+    if(mainNames[0]) colorMap[mainNames[0]] = MAIN_A_COLOR;
+    if(mainNames[1]) colorMap[mainNames[1]] = MAIN_B_COLOR;
+    [...new Set(data.filter(i=>!i.isMain).map(i=>i.person))].forEach((n,i)=>colorMap[n]=SUB_COLORS[i%SUB_COLORS.length]);
+    mode==="table"?renderTable(data,colorMap):renderTimeline(data,colorMap,mainNames);
+}
+
+// ========== 修复需求2：完整展示结束年月日 ==========
+function formatTime(x){
+    let s = "";
+    // 开始时间
+    if(x.sy){
+        s += x.sy + "年";
+        if(x.reignStart) s += `（${x.reignStart}）`;
+    }
+    if(x.sm) s += x.sm + "月";
+    if(x.sd) s += x.sd + "日 ";
+
+    // 结束时间：只要存在任意一项就完整拼接，不会丢失月、日
+    let endStr = "";
+    if(x.ey) endStr += x.ey + "年";
+    if(x.em) endStr += x.em + "月";
+    if(x.ed) endStr += x.ed + "日";
+    if(x.reignEnd && !x.ey) endStr += `（${x.reignEnd}）`;
+
+    if(endStr){
+        s += "→" + endStr;
+        // 如果只有年号无年份补充括号
+        if(x.reignEnd && x.ey) s += `（${x.reignEnd}）`;
+    }
+    return s.trim();
+}
+
+function fillRowToInput(id){
+    const row = archives[current].find(x=>x.id===id);
+    if(!row)return;
+    editingId=null;
+    document.getElementById("submitBtn").innerText="记录史料";
+    document.getElementById("sy").value=row.sy;
+    document.getElementById("sm").value=row.sm;
+    document.getElementById("sd").value=row.sd;
+    document.getElementById("ey").value=row.ey;
+    document.getElementById("em").value=row.em;
+    document.getElementById("ed").value=row.ed;
+    document.getElementById("reignStart").value=row.reignStart;
+    document.getElementById("reignEnd").value=row.reignEnd;
+    document.getElementById("person").value=row.person;
+    document.getElementById("text").value=row.text;
+    document.querySelector(`input[name="isMain"][value="${row.isMain}"]`).checked=true;
+    document.querySelector(`input[name="markLevel"][value="${row.mark||"normal"}"]`).checked=true;
+    alert("该行内容已填充至左侧输入框");
+}
+function edit(id){
+    const row = archives[current].find(x=>x.id===id);
+    if(!row)return;
+    editingId=id;
+    document.getElementById("submitBtn").innerText="保存修改";
+    document.getElementById("sy").value=row.sy;
+    document.getElementById("sm").value=row.sm;
+    document.getElementById("sd").value=row.sd;
+    document.getElementById("ey").value=row.ey;
+    document.getElementById("em").value=row.em;
+    document.getElementById("ed").value=row.ed;
+    document.getElementById("reignStart").value=row.reignStart;
+    document.getElementById("reignEnd").value=row.reignEnd;
+    document.getElementById("person").value=row.person;
+    document.getElementById("text").value=row.text;
+    document.querySelector(`input[name="isMain"][value="${row.isMain}"]`).checked=true;
+    document.querySelector(`input[name="markLevel"][value="${row.mark||"normal"}"]`).checked=true;
+}
+function resetSearchState(){
+    searchResults=[];currentSearchIndex=0;lastSearchKeyword="";
+    document.getElementById("searchTip").innerText="";
+    document.getElementById("prevBtn").disabled=true;
+    document.getElementById("nextBtn").disabled=true;
+    document.querySelectorAll(".search-highlight").forEach(el=>el.classList.remove("search-highlight"));
+}
+function searchEvent(){
+    if(!current){alert("请先选择档案");return;}
+    const kw = document.getElementById("searchInput").value.trim().toLowerCase();
+    if(!kw){alert("请输入关键词");resetSearchState();return;}
+    if(kw===lastSearchKeyword && searchResults.length>0){nextSearchResult();return;}
+    resetSearchState(); lastSearchKeyword=kw;
+    const data = sortData(archives[current]);
+    searchResults = data.filter(item=>{
+        const t = formatTime(item).toLowerCase();
+        const p = item.person.toLowerCase();
+        const txt = item.text.toLowerCase();
+        const rn = (item.reignStart+item.reignEnd).toLowerCase();
+        return t.includes(kw)||p.includes(kw)||txt.includes(kw)||rn.includes(kw);
+    });
+    if(searchResults.length===0){
+        document.getElementById("searchTip").innerText="无匹配结果";
+        alert("未找到匹配事件");return;
+    }
+    currentSearchIndex=0;
+    document.getElementById("searchTip").innerText=`共${searchResults.length}条，当前第${currentSearchIndex+1}条`;
+    document.getElementById("prevBtn").disabled = searchResults.length<=1;
+    document.getElementById("nextBtn").disabled = searchResults.length<=1;
+    setTimeout(()=>scrollToSearchResult(currentSearchIndex),100);
+}
+function prevSearchResult(){
+    if(searchResults.length<=1)return;
+    currentSearchIndex = (currentSearchIndex -1 + searchResults.length) % searchResults.length;
+    document.getElementById("searchTip").innerText=`共${searchResults.length}条，当前第${currentSearchIndex+1}条`;
+    scrollToSearchResult(currentSearchIndex);
+}
+function nextSearchResult(){
+    if(searchResults.length<=1)return;
+    currentSearchIndex = (currentSearchIndex +1) % searchResults.length;
+    document.getElementById("searchTip").innerText=`共${searchResults.length}条，当前第${currentSearchIndex+1}条`;
+    scrollToSearchResult(currentSearchIndex);
+}
+function scrollToSearchResult(idx){
+    if(idx<0||idx>=searchResults.length)return;
+    const el = document.querySelector(`[data-id="${searchResults[idx].id}"]`);
+    if(!el)return;
+    document.querySelectorAll(".search-highlight").forEach(x=>x.classList.remove("search-highlight"));
+    el.classList.add("search-highlight");
+    el.scrollIntoView({behavior:"smooth",block:"center"});
+}
+function exportJSON(){
+    const blob = new Blob([JSON.stringify(archives,null,2)],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const t = new Date().toLocaleString().replace(/[\/:\s]/g,"-");
+    a.href=url;a.download=`时序编录备份_${t}.json`;
+    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    alert("导出成功");
+}
+function triggerImport(){document.getElementById("importInput").click();}
+function importJSON(e){
+    const f = e.target.files[0];if(!f)return;
+    if(!f.name.endsWith(".json")){alert("仅支持json文件");e.target.value="";return;}
+    const reader = new FileReader();
+    reader.onload = ev=>{
+        try{
+            const data = JSON.parse(ev.target.result);
+            if(typeof data!=="object" || Array.isArray(data)){alert("文件格式错误");return;}
+            if(confirm("导入将覆盖现有数据，确认？")){
+                archives=data;save();
+                const keys = Object.keys(archives);
+                current = keys.length?keys[0]:"";
+                renderArchives();render();resetSearchState();
+                alert("导入完成");
+            }
+        }catch(err){alert("解析失败，无效JSON");console.error(err);}
+        };
+    reader.readAsText(f);
+    e.target.value="";
+}
+function del(id){
+    archives[current] = archives[current].filter(x=>x.id!==id);
+    save(); render(); resetSearchState();
+}
+function renderTable(data,map){
+    let html = `<table><tr><th>时间</th><th>人物</th><th>事件</th><th>重要标记</th><th>操作</th></tr>`;
+    data.forEach(x=>{
+        let mt="普通",mc="mark-normal";
+        if(x.mark==="self"){mt="单人关键";mc="mark-self";}
+        if(x.mark==="both"){mt="双人关键";mc="mark-both";}
+        html+=`<tr data-id="${x.id}">
+        <td>${formatTime(x)}</td>
+        <td><span class="tag" style="background:${map[x.person]}">${x.person}</span></td>
+        <td>${x.text}</td>
+        <td><span class="tag ${mc}">${mt}</span></td>
+        <td>
+            <button class="action-btn" onclick="edit(${x.id})" title="编辑">✎</button>
+            <button class="action-btn" onclick="fillRowToInput(${x.id})" title="复制">📋</button>
+            <button class="action-btn" onclick="del(${x.id})" title="删除">✕</button>
+        </td></tr>`;
+    });
+    html+="</table>";
+    document.getElementById("view").innerHTML=html;
+}
+function renderTimeline(data,colorMap,mainPersonList){
+    const wrap = document.createElement("div");
+    wrap.className="timeline-container";
+    wrap.innerHTML='<div class="v-line"></div>';
+    const group = {};
+    data.forEach(item=>{
+        if(!group[item.timeKey]) group[item.timeKey]=[];
+        group[item.timeKey].push(item);
+    });
+    const groups = Object.values(group);
+    if(groups.length===0){
+        wrap.innerHTML+='<div style="text-align:center;padding:80px;color:#aaa;">暂无事件</div>';
+        document.getElementById("view").innerHTML="";document.getElementById("view").appendChild(wrap);return;
+    }
+    groups.forEach(items=>{
+        const node = document.createElement("div");
+        node.className="t-node";
+        const blockA = document.createElement("div"); blockA.className="t-block-a";
+        const blockCenter = document.createElement("div"); blockCenter.className="t-block-center";
+        const mainItem = items.find(i=>i.isMain) || items[0];
+        const dot = document.createElement("div"); 
+        dot.className="t-dot"; 
+        dot.style.background=colorMap[mainItem.person]; 
+        dot.style.borderColor=colorMap[mainItem.person];
+        blockCenter.appendChild(dot);
+        const blockB = document.createElement("div"); blockB.className="t-block-b";
+        const blockC = document.createElement("div"); blockC.className="t-block-c";
+        items.forEach(row=>{
+            const card = document.createElement("div");
+            card.className="t-card";
+            card.setAttribute("data-id",row.id);
+            if(row.isMain){
+                if(row.person === mainPersonList[0]){
+                    card.classList.add("main-a");
+                    blockA.appendChild(card);
+                }else{
+                    card.classList.add("main-b");
+                    blockB.appendChild(card);
+                }
+            }else{
+                card.classList.add("sub-c");
+                blockC.appendChild(card);
+            }
+            if(row.mark==="self") card.classList.add("is-key-self");
+            if(row.mark==="both") card.classList.add("is-key-both");
+            const timeDom = `<div class="t-time">${formatTime(row)}</div>`;
+            const textDom = `<div class="t-text">${row.text}</div>`;
+            const actDom = `
+            <div class="t-actions">
+                <div class="t-person" style="color:${colorMap[row.person]}">${row.person}</div>
+                <div>
+                    <button class="action-btn" onclick="edit(${row.id})">✎</button>
+                    <button class="action-btn" onclick="fillRowToInput(${row.id})">📋</button>
+                    <button class="action-btn" onclick="del(${row.id})">✕</button>
+                </div>
+            </div>`;
+            card.innerHTML = timeDom + textDom + actDom;
+        });
+        node.appendChild(blockA);
+        node.appendChild(blockCenter);
+        node.appendChild(blockB);
+        node.appendChild(blockC);
+        wrap.appendChild(node);
+    });
+    document.getElementById("view").innerHTML="";
+    document.getElementById("view").appendChild(wrap);
+}
+</script>
+</body>
+</html>
